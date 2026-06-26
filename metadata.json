@@ -1,0 +1,6 @@
+{
+  "name": "Mtrini Khedma",
+  "description": "Local service marketplace for Morocco. Book trusted plumbers, electricians, painters, and cleaners in Casablanca and Rabat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

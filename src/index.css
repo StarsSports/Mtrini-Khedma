@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+}
+
+/* RTL overrides for a warm, premium, highly readable Arabic experience */
+[dir="rtl"] {
+  font-family: 'Cairo', var(--font-sans);
+}
+
+[dir="rtl"] h1, 
+[dir="rtl"] h2, 
+[dir="rtl"] h3, 
+[dir="rtl"] h4, 
+[dir="rtl"] h5, 
+[dir="rtl"] h6,
+[dir="rtl"] .font-display {
+  font-family: 'Cairo', var(--font-display);
+}
+
+body {
+  background-color: #f8fafc; /* Softer, premium off-white (slate-50) */
+  color: #0f172a; /* Slate-900 */
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Modern soft premium shadows */
+.premium-shadow {
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.premium-shadow-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.premium-shadow-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.premium-shadow-lg {
+  box-shadow: 0 20px 50px -12px rgba(15, 23, 42, 0.08);
+}
+
