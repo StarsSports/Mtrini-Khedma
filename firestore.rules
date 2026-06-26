@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Standalone helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Helper to validate ServiceProvider
+    function isValidServiceProvider(data) {
+      return data.keys().hasAll(['id', 'name', 'category', 'city', 'rate', 'rateUnit', 'phone'])
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 100
+        && data.category is string && (data.category == 'plumber' || data.category == 'electrician' || data.category == 'painter' || data.category == 'cleaner')
+        && data.city is string && (data.city == 'Casablanca' || data.city == 'Rabat')
+        && data.rate is number && data.rate >= 20
+        && data.rateUnit is string && (data.rateUnit == 'hour' || data.rateUnit == 'job')
+        && data.phone is string && data.phone.size() <= 20;
+    }
+
+    // Helper to validate Booking
+    function isValidBooking(data) {
+      return data.keys().hasAll(['id', 'providerId', 'clientName', 'clientPhone', 'bookingDate', 'bookingTime', 'jobDescription', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.providerId is string && data.providerId.size() <= 128
+        && data.clientName is string && data.clientName.size() <= 100
+        && data.clientPhone is string && data.clientPhone.size() <= 20
+        && data.bookingDate is string && data.bookingDate.size() <= 20
+        && data.bookingTime is string && data.bookingTime.size() <= 20
+        && data.jobDescription is string && data.jobDescription.size() <= 2000
+        && data.status is string && (data.status == 'pending' || data.status == 'confirmed' || data.status == 'completed' || data.status == 'cancelled');
+    }
+
+    // Helper to validate UserAccount
+    function isValidUserAccount(data) {
+      return data.keys().hasAll(['id', 'email', 'role', 'name', 'phone', 'city'])
+        && data.id is string && data.id.size() <= 128
+        && data.email is string && data.email.size() <= 150
+        && data.role is string && (data.role == 'client' || data.role == 'pro')
+        && data.name is string && data.name.size() <= 100
+        && data.phone is string && data.phone.size() <= 20
+        && data.city is string && (data.city == 'Casablanca' || data.city == 'Rabat');
+    }
+
+    // Providers collection rules
+    match /providers/{providerId} {
+      allow read: if true;
+      allow create: if isValidId(providerId) && isValidServiceProvider(request.resource.data);
+      allow update: if isValidId(providerId) && isValidServiceProvider(request.resource.data);
+      allow delete: if isValidId(providerId);
+    }
+
+    // Bookings collection rules
+    match /bookings/{bookingId} {
+      allow read: if true;
+      allow create: if isValidId(bookingId) && isValidBooking(request.resource.data);
+      allow update: if isValidId(bookingId) && isValidBooking(request.resource.data);
+      allow delete: if isValidId(bookingId);
+    }
+
+    // Users collection rules
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isValidId(userId) && isValidUserAccount(request.resource.data);
+      allow update: if isValidId(userId) && isValidUserAccount(request.resource.data);
+      allow delete: if isValidId(userId);
+    }
+  }
+}

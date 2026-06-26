@@ -10,6 +10,8 @@ import ProStudio from './components/ProStudio';
 import AuthModal, { UserAccount } from './components/AuthModal';
 import { TRANSLATIONS, Language } from './translations';
 import { motion, AnimatePresence } from 'motion/react';
+import { db, handleFirestoreError, OperationType } from './firebase';
+import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import {
   Wrench,
   Dumbbell,
@@ -90,6 +92,40 @@ export default function App() {
     localStorage.setItem('mtrini_favorites', JSON.stringify(favorites));
   }, [favorites]);
 
+  // Real-time synchronization of Service Providers from Firestore
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'providers'), (snapshot) => {
+      const loadedProviders: ServiceProvider[] = [];
+      snapshot.forEach((doc) => {
+        loadedProviders.push(doc.data() as ServiceProvider);
+      });
+      // Filter out any invalid items and default workers starts with prov-
+      const validProviders = loadedProviders.filter((p) => p && p.id && !p.id.startsWith('prov-'));
+      setProviders(validProviders);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'providers');
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Real-time synchronization of Bookings from Firestore
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'bookings'), (snapshot) => {
+      const loadedBookings: Booking[] = [];
+      snapshot.forEach((doc) => {
+        loadedBookings.push(doc.data() as Booking);
+      });
+      // Sort bookings by creation date descending
+      loadedBookings.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      setBookings(loadedBookings);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'bookings');
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const handleToggleFavorite = (providerId: string) => {
     setFavorites((prev) =>
       prev.includes(providerId) ? prev.filter((id) => id !== providerId) : [...prev, providerId]
@@ -116,20 +152,23 @@ export default function App() {
     localStorage.setItem('mtrini_current_user', JSON.stringify(user));
 
     if (newProvider) {
-      setProviders((prev) => {
-        const updated = [newProvider, ...prev];
-        localStorage.setItem('mtrini_providers', JSON.stringify(updated));
-        return updated;
-      });
+      // In AuthModal, we already save the provider to Firestore!
+      setSuccessNotification(
+        lang === 'en' 
+          ? `Welcome, ${user.name}! Your professional profile is now active and listed globally.`
+          : lang === 'fr'
+          ? `Bienvenue, ${user.name}! Votre profil professionnel est désormais actif et répertorié mondialement.`
+          : `مرحباً بك، ${user.name}! الملف المهني ديالك دابا واجد ومنشور فالعالم كامل.`
+      );
+    } else {
+      setSuccessNotification(
+        lang === 'en' 
+          ? `Welcome back, ${user.name}! (${user.role === 'pro' ? 'Professional' : 'Client'})`
+          : lang === 'fr'
+          ? `Bon retour, ${user.name}! (${user.role === 'pro' ? 'Professionnel' : 'Client'})`
+          : `مرحباً بعودتك، ${user.name}! (${user.role === 'pro' ? 'حرفي' : 'كليان'})`
+      );
     }
-
-    setSuccessNotification(
-      lang === 'en' 
-        ? `Welcome back, ${user.name}! (${user.role === 'pro' ? 'Professional' : 'Client'})`
-        : lang === 'fr'
-        ? `Bon retour, ${user.name}! (${user.role === 'pro' ? 'Professionnel' : 'Client'})`
-        : `مرحباً بعودتك، ${user.name}! (${user.role === 'pro' ? 'حرفي' : 'كليان'})`
-    );
   };
 
   const handleLogout = () => {
@@ -142,15 +181,7 @@ export default function App() {
     );
   };
 
-  // Sync to localStorage
-  useEffect(() => {
-    localStorage.setItem('mtrini_providers', JSON.stringify(providers));
-  }, [providers]);
-
-  useEffect(() => {
-    localStorage.setItem('mtrini_bookings', JSON.stringify(bookings));
-  }, [bookings]);
-
+  // Sync settings (non-reactive settings) to localStorage
   useEffect(() => {
     localStorage.setItem('mtrini_lang', lang);
   }, [lang]);
@@ -172,16 +203,22 @@ export default function App() {
   }, [deletedDefaultWorkerIds]);
 
   // Handle Booking Creation
-  const handleCreateBooking = (bookingData: Omit<Booking, 'id' | 'createdAt' | 'status'>) => {
+  const handleCreateBooking = async (bookingData: Omit<Booking, 'id' | 'createdAt' | 'status'>) => {
+    const bookingId = `book-${Date.now()}`;
     const newBooking: Booking = {
       ...bookingData,
-      id: `book-${Date.now()}`,
+      id: bookingId,
       status: 'pending',
       createdAt: new Date().toISOString().split('T')[0],
       clientId: currentUser ? currentUser.id : undefined
     };
 
-    setBookings((prev) => [newBooking, ...prev]);
+    try {
+      await setDoc(doc(db, 'bookings', bookingId), newBooking);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `bookings/${bookingId}`);
+    }
+
     setSelectedProvider(null);
     
     // Translated success notification
@@ -203,28 +240,34 @@ export default function App() {
   };
 
   // Handle Booking Status: Cancel
-  const handleCancelBooking = (bookingId: string) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, status: 'cancelled' as const } : b))
-    );
+  const handleCancelBooking = async (bookingId: string) => {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), { status: 'cancelled' });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `bookings/${bookingId}`);
+    }
   };
 
   // Handle Booking Status: Complete
-  const handleCompleteBooking = (bookingId: string) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, status: 'completed' as const } : b))
-    );
+  const handleCompleteBooking = async (bookingId: string) => {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), { status: 'completed' });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `bookings/${bookingId}`);
+    }
   };
 
   // Handle Pro Dashboard status updates
-  const handleUpdateBookingStatus = (bookingId: string, status: Booking['status']) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
-    );
+  const handleUpdateBookingStatus = async (bookingId: string, status: Booking['status']) => {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), { status });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `bookings/${bookingId}`);
+    }
   };
 
   // Handle leaving the Pro Program / Deleting Profile
-  const handleRemoveProvider = (providerId: string) => {
+  const handleRemoveProvider = async (providerId: string) => {
     // If it's a default/AI worker, add to deletedDefaultWorkerIds list
     const isDefault = INITIAL_PROVIDERS.some((initialP) => initialP.id === providerId);
     if (isDefault) {
@@ -234,66 +277,79 @@ export default function App() {
         return updated;
       });
     }
-    setProviders((prev) => prev.filter((p) => p.id !== providerId));
+    try {
+      await deleteDoc(doc(db, 'providers', providerId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `providers/${providerId}`);
+    }
   };
 
   // Handle Adding a Provider Review
-  const handleAddReview = (
+  const handleAddReview = async (
     providerId: string,
     rating: number,
     text: string,
     authorName: string
   ) => {
-    // Mark as reviewed
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.providerId === providerId && b.status === 'completed'
-          ? { ...b, hasReviewed: true }
-          : b
-      )
+    // 1. Mark booking as reviewed in Firestore
+    const bookingToUpdate = bookings.find(
+      (b) => b.providerId === providerId && b.status === 'completed' && !b.hasReviewed
     );
+    if (bookingToUpdate) {
+      try {
+        await updateDoc(doc(db, 'bookings', bookingToUpdate.id), { hasReviewed: true });
+      } catch (err) {
+        console.error("Failed to mark booking as reviewed:", err);
+      }
+    }
 
-    // Update reviews and score
-    setProviders((prevProviders) =>
-      prevProviders.map((p) => {
-        if (p.id !== providerId) return p;
+    // 2. Fetch/update reviews and average score in Firestore
+    const p = providers.find((prov) => prov.id === providerId);
+    if (p) {
+      const newReview = {
+        id: `rev-${Date.now()}`,
+        authorName,
+        authorCity: p.city,
+        rating,
+        text,
+        date: new Date().toISOString().split('T')[0]
+      };
 
-        const newReview = {
-          id: `rev-${Date.now()}`,
-          authorName,
-          authorCity: p.city,
-          rating,
-          text,
-          date: new Date().toISOString().split('T')[0]
-        };
+      const updatedReviews = [newReview, ...p.reviews];
+      const averageRating =
+        updatedReviews.reduce((sum, r) => sum + r.rating, 0) / updatedReviews.length;
 
-        const updatedReviews = [newReview, ...p.reviews];
-        const averageRating =
-          updatedReviews.reduce((sum, r) => sum + r.rating, 0) / updatedReviews.length;
-
-        return {
-          ...p,
+      try {
+        await updateDoc(doc(db, 'providers', providerId), {
           reviews: updatedReviews,
           reviewsCount: updatedReviews.length,
           rating: averageRating
-        };
-      })
-    );
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `providers/${providerId}`);
+      }
+    }
   };
 
   // Onboard New Professional
-  const handleProviderApplication = (application: Omit<ServiceProvider, 'id' | 'rating' | 'reviewsCount' | 'reviews' | 'isVerified' | 'completedJobs'>) => {
+  const handleProviderApplication = async (application: Omit<ServiceProvider, 'id' | 'rating' | 'reviewsCount' | 'reviews' | 'isVerified' | 'completedJobs'>) => {
+    const providerId = `pro-${Date.now()}`;
     const newProvider: ServiceProvider = {
       ...application,
-      id: `pro-${Date.now()}`,
+      id: providerId,
       rating: 5.0,
       reviewsCount: 0,
       reviews: [],
       isVerified: false,
       completedJobs: 0,
+      isWorkProgramParticipant: true
     };
 
-    setProviders((prev) => [newProvider, ...prev]);
+    try {
+      await setDoc(doc(db, 'providers', providerId), newProvider);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `providers/${providerId}`);
+    }
   };
 
   // Reset function for application settings
@@ -305,7 +361,7 @@ export default function App() {
     localStorage.removeItem('mtrini_hide_default_workers');
     localStorage.removeItem('mtrini_deleted_default_worker_ids');
     
-    setProviders(INITIAL_PROVIDERS);
+    setProviders([]);
     setBookings([]);
     setCurrency('MAD');
     setAccentColor('slate');
@@ -606,7 +662,7 @@ export default function App() {
                       {lang === 'en' ? 'Live Network Health' : lang === 'fr' ? 'État du Réseau en Direct' : 'حالة الشبكة الحية'}
                     </span>
                     <h4 className="font-display text-base font-black text-slate-950 uppercase">
-                      Mythic Verified™
+                      Synovex Verified™
                     </h4>
                     <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                       {lang === 'en' ? 'Every provider is manually vetted for Moroccan identity and qualification background.' : lang === 'fr' ? 'Chaque prestataire est vérifié manuellement pour son identité et ses qualifications marocaines.' : 'كل حرفي كايتم التحقق من الهوية ديالو والخبرة المهنية ديالو يدوياً.'}
@@ -898,7 +954,7 @@ export default function App() {
             <div className="mt-3 flex items-center justify-center md:justify-end gap-1.5 text-xs text-slate-400">
               <span>Crafted by</span>
               <span className="font-mono font-black text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2 py-0.5 rounded-md shadow-xs text-[10px] tracking-wide uppercase transition-colors">
-                Mythic Labs
+                Synovex Labs
               </span>
             </div>
           </div>

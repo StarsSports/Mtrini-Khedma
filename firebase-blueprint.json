@@ -1,0 +1,177 @@
+{
+  "entities": {
+    "ServiceProvider": {
+      "title": "ServiceProvider",
+      "description": "Moroccan home service professional profile",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "rate": {
+          "type": "number"
+        },
+        "rateUnit": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "experienceYears": {
+          "type": "number"
+        },
+        "bio": {
+          "type": "string"
+        },
+        "rating": {
+          "type": "number"
+        },
+        "reviewsCount": {
+          "type": "number"
+        },
+        "isVerified": {
+          "type": "boolean"
+        },
+        "completedJobs": {
+          "type": "number"
+        },
+        "isWorkProgramParticipant": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "category",
+        "city",
+        "rate",
+        "rateUnit",
+        "phone"
+      ]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Booking request for service",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "providerName": {
+          "type": "string"
+        },
+        "providerCategory": {
+          "type": "string"
+        },
+        "providerCity": {
+          "type": "string"
+        },
+        "clientName": {
+          "type": "string"
+        },
+        "clientPhone": {
+          "type": "string"
+        },
+        "clientAddress": {
+          "type": "string"
+        },
+        "bookingDate": {
+          "type": "string"
+        },
+        "bookingTime": {
+          "type": "string"
+        },
+        "jobDescription": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "totalPriceEstimate": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "clientId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "providerId",
+        "clientName",
+        "clientPhone",
+        "bookingDate",
+        "bookingTime",
+        "jobDescription",
+        "status"
+      ]
+    },
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "User login account",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "role",
+        "name",
+        "phone",
+        "city"
+      ]
+    }
+  },
+  "firestore": {
+    "/providers/{providerId}": {
+      "schema": "ServiceProvider",
+      "description": "Global collection of service providers"
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Global collection of client bookings"
+    },
+    "/users/{userId}": {
+      "schema": "UserAccount",
+      "description": "Registered client and professional users"
+    }
+  }
+}

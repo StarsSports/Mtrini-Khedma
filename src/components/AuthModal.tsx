@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { MoroccoCity, ServiceCategory, ServiceProvider } from '../types';
 import { Language } from '../translations';
 import { motion, AnimatePresence } from 'motion/react';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { doc, setDoc, getDocs, query, collection, where } from 'firebase/firestore';
 import {
   X,
   Mail,
@@ -185,7 +187,7 @@ export default function AuthModal({ isOpen, onClose, lang, onAuthSuccess, provid
     return phoneRegex.test(clean);
   };
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -200,9 +202,29 @@ export default function AuthModal({ isOpen, onClose, lang, onAuthSuccess, provid
         return;
       }
 
-      const foundUser = savedUsers.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase().trim() && u.password === password
-      );
+      let foundUser: UserAccount | undefined;
+      
+      // 1. First, search globally in Firestore
+      try {
+        const q = query(collection(db, 'users'), where('email', '==', email.toLowerCase().trim()));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const userDoc = querySnapshot.docs[0];
+          const userData = userDoc.data() as UserAccount;
+          if (userData.password === password) {
+            foundUser = userData;
+          }
+        }
+      } catch (err) {
+        console.error("Firestore user fetch error: ", err);
+      }
+
+      // 2. Fallback to localStorage if not found or offline
+      if (!foundUser) {
+        foundUser = savedUsers.find(
+          (u) => u.email.toLowerCase() === email.toLowerCase().trim() && u.password === password
+        );
+      }
 
       if (!foundUser) {
         setError(t.invalidCredentials);
@@ -211,7 +233,7 @@ export default function AuthModal({ isOpen, onClose, lang, onAuthSuccess, provid
 
       setSuccess(t.successLogin);
       setTimeout(() => {
-        onAuthSuccess(foundUser);
+        onAuthSuccess(foundUser!);
         onClose();
         setSuccess(null);
         setPassword('');
@@ -228,9 +250,24 @@ export default function AuthModal({ isOpen, onClose, lang, onAuthSuccess, provid
         return;
       }
 
-      const emailExists = savedUsers.some(
-        (u) => u.email.toLowerCase() === email.toLowerCase().trim()
-      );
+      // Check if email already exists globally in Firestore
+      let emailExists = false;
+      try {
+        const q = query(collection(db, 'users'), where('email', '==', email.toLowerCase().trim()));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          emailExists = true;
+        }
+      } catch (err) {
+        console.error("Firestore email check error: ", err);
+      }
+
+      // Also check local storage fallback
+      if (!emailExists) {
+        emailExists = savedUsers.some(
+          (u) => u.email.toLowerCase() === email.toLowerCase().trim()
+        );
+      }
 
       if (emailExists) {
         setError(t.emailExists);
@@ -291,7 +328,17 @@ export default function AuthModal({ isOpen, onClose, lang, onAuthSuccess, provid
         providerId: linkedProviderId,
       };
 
-      // Persist to users array
+      // 1. Write to Firestore globally
+      try {
+        await setDoc(doc(db, 'users', newUserId), newUser);
+        if (role === 'pro' && newProvider) {
+          await setDoc(doc(db, 'providers', linkedProviderId!), newProvider);
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, `users/${newUserId}`);
+      }
+
+      // 2. Write to local storage fallback
       const updatedUsers = [...savedUsers, newUser];
       localStorage.setItem('mtrini_users', JSON.stringify(updatedUsers));
 
